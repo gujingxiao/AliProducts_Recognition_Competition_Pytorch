@@ -76,14 +76,16 @@ def load_data(mode='train') -> 'Tuple[DataLoader[np.ndarray],DataLoader[np.ndarr
     val_df = pd.read_csv(VAL_CSV)
 
     counts = train_df.class_id.value_counts()
-    selected_classes = counts[counts >= MIN_SAMPLES_PER_CLASS].index
+
+    count1 = counts[counts >= MIN_SAMPLES_PER_CLASS]
+    selected_classes = count1[count1 <= MAX_SAMPLES_PER_CLASS].index
     num_classes = selected_classes.shape[0]
     print('classes with at least N samples:', num_classes)
 
     train_select_df = train_df.loc[train_df.class_id.isin(selected_classes)].copy()
-    print('train_df', train_df.shape)
+    print('train_df', train_select_df.shape)
     val_select_df = val_df.loc[val_df.class_id.isin(selected_classes)].copy()
-    print('val_df', val_df.shape)
+    print('val_df', val_select_df.shape)
 
     label_encoder_train = LabelEncoder()
     label_encoder_train.fit(train_select_df.class_id.values)

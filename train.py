@@ -2,19 +2,20 @@
 # Description: Train Code for AliProducts Recognition Competition
 
 import time
-import torch.nn as nn
-import torchvision
 from reader.dataloader import *
 from utils.metric import *
+from utils.margin import *
+from model import modelzoo
 
-def train(train_loader: Any, model: Any, criterion: Any, optimizer: Any, epoch: int) -> None:
+
+def train(train_loader: Any, model: Any, margin: Any, criterion: Any, optimizer: Any, epoch: int, num_classes: Any) -> None:
     print('epoch {}'.format(epoch))
     batch_time = AverageMeter()
     losses = AverageMeter()
     avg_score = AverageMeter()
+    map_score = MapAverageMeter()
 
     model.train()
-    activation = nn.Softmax(dim=1)
     num_steps = min(len(train_loader), MAX_STEPS_PER_EPOCH)
 
     print('train total batches: {}'.format(num_steps))
@@ -26,13 +27,16 @@ def train(train_loader: Any, model: Any, criterion: Any, optimizer: Any, epoch: 
             break
 
         output = model(input_.cuda())
-        output = activation(output)
+        output = margin(output, target.cuda())
 
         loss = criterion(output, target.cuda())
         confs, predicts = torch.max(output.detach(), dim=1)
 
         # TODO: Add MAP for evaluation
         avg_score.update(GAP(predicts, confs, target))
+
+        pred_list, true_list = MAP(predicts, confs, target, num_classes)
+        map_score.update( pred_list, true_list)
 
         losses.update(loss.data.item(), input_.size(0))
         optimizer.zero_grad()
@@ -43,9 +47,9 @@ def train(train_loader: Any, model: Any, criterion: Any, optimizer: Any, epoch: 
         end = time.time()
 
         if i % LOG_FREQ == 0:
-            print('Epoch: {} [{}/{}]\t time: {:.3f} ({:.3f})\t loss: {:.4f} ({:.4f})\t GAP: {:.4f} ({:.4f})\t LR: {:.6}'.format(
+            print('Epoch: {} [{}/{}]\t time: {:.3f} ({:.3f})\t loss: {:.4f} ({:.4f})\t GAP: {:.4f} ({:.4f})\t MAP: {:.4f}\t LR: {:.6}'.format(
                 epoch, i, num_steps, batch_time.val, batch_time.avg, losses.val, losses.avg,
-                avg_score.val, avg_score.avg, optimizer.state_dict()['param_groups'][0]['lr']))
+                avg_score.val, avg_score.avg, map_score.avg_map, optimizer.state_dict()['param_groups'][0]['lr']))
 
         if has_time_run_out():
             break
@@ -53,13 +57,13 @@ def train(train_loader: Any, model: Any, criterion: Any, optimizer: Any, epoch: 
     print(' * average GAP on train {:.4f}'.format(avg_score.avg))
 
 
-def val(val_loader: Any, model: Any, criterion: Any,) -> None:
+def val(val_loader: Any, model: Any, margin: Any, criterion: Any, num_classes: Any) -> None:
     batch_time = AverageMeter()
     losses = AverageMeter()
     avg_score = AverageMeter()
+    map_score = MapAverageMeter()
 
     model.eval()
-    activation = nn.Softmax(dim=1)
     num_steps = len(val_loader)
 
     print('val total batches: {}'.format(num_steps))
@@ -71,11 +75,14 @@ def val(val_loader: Any, model: Any, criterion: Any,) -> None:
                 break
 
             output = model(input_.cuda())
+            output = margin(output, target.cuda())
 
-            output = activation(output)
             loss = criterion(output, target.cuda())
             confs, predicts = torch.max(output.detach(), dim=1)
             avg_score.update(GAP(predicts, confs, target))
+
+            pred_list, true_list = MAP(predicts, confs, target, num_classes)
+            map_score.update(pred_list, true_list)
 
             losses.update(loss.data.item(), input_.size(0))
 
@@ -83,10 +90,10 @@ def val(val_loader: Any, model: Any, criterion: Any,) -> None:
             end = time.time()
 
             if i % LOG_FREQ == 0:
-                print('[{}/{}]\t time {:.3f} ({:.3f})\t loss {:.4f} ({:.4f})\t GAP {:.4f} ({:.4f})\t'.format(
-                    i, num_steps, batch_time.val, batch_time.avg, losses.val, losses.avg, avg_score.val, avg_score.avg))
+                print('[{}/{}]\t time {:.3f} ({:.3f})\t loss {:.4f} ({:.4f})\t GAP {:.4f} ({:.4f})\t MAP: {:.4f}\t'.format(
+                    i, num_steps, batch_time.val, batch_time.avg, losses.val, losses.avg, avg_score.val, avg_score.avg, map_score.avg_map))
 
-    print(' * average GAP on val {:.4f}'.format(avg_score.avg))
+    print(' * on val, average GAP:{:.4f}\t MAP:{:.4f}\t MEAN ERROR:{:.4f}'.format(avg_score.avg, map_score.avg_map, map_score.error))
 
 def has_time_run_out() -> bool:
     return time.time() - global_start_time > TIME_LIMIT - 500
@@ -100,14 +107,8 @@ if __name__ == '__main__':
 
     # Backbone
     # TODO: Add more backbones
-    if BACKBONE == 'resnet34':
-        model = torchvision.models.resnet34(pretrained=True)
-    elif BACKBONE == 'resnet50':
-        model = torchvision.models.resnet50(pretrained=True)
-    elif BACKBONE == 'resnet101':
-        model = torchvision.models.resnet101(pretrained=True)
-    else:
-        model = torchvision.models.resnet50(pretrained=True)
+    model = modelzoo.get_model(BACKBONE, num_classes)
+    print('Backbone: {}'.format(BACKBONE))
 
     # Set True for training
     # Consider freeze some layers while finetuning
@@ -117,34 +118,54 @@ if __name__ == '__main__':
     # Change last two layers to adapt for the dataset and classification
     # This configuration only for resnet, other models should be different
     model.avg_pool = nn.AdaptiveAvgPool2d(1)
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
+
+    if BACKBONE == 'resnet34':
+        in_feature = 512
+    else:
+        in_feature = 2048
+    if MARGIN_TYPE == 'arcMargin':
+        margin = ArcMarginProduct(in_feature, num_classes)
+    elif MARGIN_TYPE == 'inner':
+        margin = InnerProduct(in_feature, num_classes)
+
+    for param in margin.parameters():
+        param.requires_grad = True
 
     # Make model in device 0
-    model.cuda(device_ids[0])
     # Set parallel. Single GPU is also okay.
+    model.cuda(device_ids[0])
+    margin.cuda(device_ids[0])
     model = nn.DataParallel(model, device_ids=device_ids)
+    margin = nn.DataParallel(margin, device_ids=device_ids)
 
     # if checkpoint is not none, load it as pretrained
-    if CHECKPOINT != '':
-        checkpoint = torch.load(CHECKPOINT)
+    if BACKBONE_CHECKPOINT != '':
+        checkpoint = torch.load(BACKBONE_CHECKPOINT)
         model.load_state_dict(checkpoint, strict=False)
+
+    if MARGIN_CHECKPOINT != '':
+        checkpoint = torch.load(MARGIN_CHECKPOINT)
+        margin.load_state_dict(checkpoint, strict=False)
 
     # Loss function
     # TODO: Add more loss function
     criterion = nn.CrossEntropyLoss()
 
     # Set optimizer and learning strategy
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(
+        [{'params': model.parameters(), 'weight_decay': 5e-4},
+        {'params': margin.parameters(), 'weight_decay': 5e-4}], lr=LEARNING_RATE)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=LR_STEP, gamma=LR_FACTOR)
 
     # Training
     for epoch in range(1, NUM_EPOCHS + 1):
-        print('-' * 50)
-        train(train_loader, model, criterion, optimizer, epoch)
-        torch.save(model.state_dict(), 'weights/aliproducts_recognition_{}_{}.pkl'.format(BACKBONE, epoch))
+        print('-' * 80)
+        train(train_loader, model, margin, criterion, optimizer, epoch, num_classes)
+        torch.save(model.state_dict(), 'weights/aliproducts_recognition_{}_backbone_{}.pkl'.format(BACKBONE, epoch))
+        torch.save(margin.state_dict(), 'weights/aliproducts_recognition_{}_margin_{}_{}.pkl'.format(BACKBONE, MARGIN_TYPE, epoch))
         lr_scheduler.step(epoch)
 
-        val(val_loader, model, criterion)
+        val(val_loader, model, margin, criterion, num_classes)
 
         if has_time_run_out():
             break
