@@ -1,6 +1,9 @@
 from model import resnet
 from model import xception
 from model import senet
+from .res2net_v1b import res2net50_v1b_26w_4s, res2net101_v1b_26w_4s
+from .res2net import res2net50_26w_4s, res2net101_26w_4s
+from .res2next import res2next50
 
 def get_model(model_type='resnet50', num_classes=1000):
     # TODO: Add more backbones
@@ -16,18 +19,18 @@ def get_model(model_type='resnet50', num_classes=1000):
         model = resnet.resnext50_32x4d(pretrained=True)
     elif model_type == 'resnext101_32x8d':
         model = resnet.resnext101_32x8d(pretrained=True)
+    elif model_type == 'res2net_v1b_50':
+        model = res2net50_v1b_26w_4s(pretrained=True)
+    elif model_type == 'res2net_v1b_101':
+        model = res2net101_v1b_26w_4s(pretrained=True)
+    elif model_type == 'res2net50_26w_4s':
+        model = res2net50_26w_4s(pretrained=True)
+    elif model_type == 'res2net101_26w_4s':
+        model = res2net101_26w_4s(pretrained=True)
+    elif model_type == 'res2next50':
+        model = res2next50(pretrained=True)
     elif model_type == 'senet154':
         model = senet.senet154(num_classes=num_classes, pretrained='imagenet')
-    elif model_type == 'se_resnet50':
-        model = senet.se_resnet50(num_classes=num_classes, pretrained='imagenet')
-    elif model_type == 'se_resnet101':
-        model = senet.se_resnet101(num_classes=num_classes, pretrained='imagenet')
-    elif model_type == 'se_resnet152':
-        model = senet.se_resnet152(num_classes=num_classes, pretrained='imagenet')
-    elif model_type == 'se_resnext50_32x4d':
-        model = senet.se_resnext50_32x4d(num_classes=num_classes, pretrained='imagenet')
-    elif model_type == 'se_resnext101_32x4d':
-        model = senet.se_resnext101_32x4d(num_classes=num_classes, pretrained='imagenet')
     else:
         model = resnet.resnet50(pretrained=True)
 

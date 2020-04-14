@@ -354,10 +354,10 @@ class SENet(nn.Module):
 
     def logits(self, x):
         x = self.avg_pool(x)
-        if self.dropout is not None:
-            x = self.dropout(x)
+        # if self.dropout is not None:
+            # x = self.dropout(x)
         x = x.view(x.size(0), -1)
-        # x = self.last_linear(x)
+        x = self.last_linear(x)
         return x
 
 

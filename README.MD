@@ -1,25 +1,76 @@
 
 # AliProducts Recognition
 
-## System Requirement
+## 系統要求 System Requirement		
 1. python 3.5 or 3.6
-2. torch 1.1.0
-3. torchvision 0.3.0
-4. pandas 0.23.4
+2. CUDA10.1 + CUDNN 7.6.5
+3. torch 1.4.0
+4. torchvision 0.5.0
+5. pandas 0.23.4
+6. imgaug 0.4.0
 
-## Data Process
-1. Edit configs.py. Change dataset path, backbone and devide_ids.       
-2. Run jsonToCsv.py to generate csv files.      
+## 数据转换 Data Convert
+1. 运行jsonTocsv脚本，可以将train.json和val.json转换为对应的csv保存。这里进行转换主要为了处理方便。 		
+2. 脚本还会生成一个balance train文件，主要是将数目较多的类别进行一个随机选择，来平衡一下样本。		
 
-## Training
-1. Make sure configs.py suitable for your configeration.        
-2. Run train.py     
+## 配置参数 Configuration
+1. 所有参数配置在utils下configs脚本中。这里需要配置数据集路径、GPU和训练相关参数。		
+2. 当前还有arcface和senet154存在问题，不可用。		
 
-## Validation
-1. Make sure configs.py suitable for your configeration.        
-2. Run val.py   
+## 训练 Training
+1. 完成修改后，使用train脚本进行训练。     
+2. 训练时每个epoch会自动保存模型。另外还可以从configs中配置N steps来保存模型，以防止意外宕机。		
+3. 每个epoch后都会进行evaluation，评价指标将通过loss，GAP和MAP进行评价。比赛所使用的为MAP。		
 
-## Baseline
-|Models|Loss Function|Base LR|Batch Size|Class Number|Min Sample Number|Resolution|GAP|
-|:---|:---|:---|:---|:---|:---|:---|:---|
-|resnet50|CrossEntropyLoss|0.001|128|4566|100|224 x 224|0.8859| 
+## 验证 Validation
+1. 使用val脚本进行evaluation，生成指标与train中保持一致。   	
+2. 通过configs中GENETATE_SELECT来控制是否需要生成选择列表，用于后续选择稳定类别训练使用。		
+
+## 图像处理 Image Process
+1. 由于图像大小比例不一致，为了保持图像原有比例不变，以最长边为准，短边加pad，将图像居中到一个黑色正方形中		
+2. 当前训练采用分辨率224x224		
+3. 采用imgaug的库进行数，数据显示等采用opencv		
+
+## 基线 Baseline   
+* 基线不使用数据增强 No data augmentations		
+* 基线训练采用imagenet预训练权重  Use imagenet pretrained weights		
+* 基线采用全连接作为分类器  Inner linear classifier		
+* 本轮使用train.csv中未经过数据平衡的数据列表		
+* 选取类别样本数在[80, 100]范围内的样本，共计2345类，来训练特征提取器		
+* 训练共计3轮，第一轮为warm up，第二轮为训练特征提取器		
+* 第三轮使用第二轮最优模型并冻结权重进行50030类的训练		
+
+|R|Models|Loss|Opt|Freeze|Epochs|Base LR|LR_STEP|LR_FACTOR|Batch Size|Class Number|Input|GAP|MAP
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|1|res2net_v1b_50|CELoss|Adam|Freeze Backbone|2|0.001|4|0.5|512|2345|224x224|0.3876|0.4562| 
+|2|res2net_v1b_50|CELoss|Adam|None|10|0.001|4|0.5|96|2345|224x224|0.9231|0.9298|
+|3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|512|50030|224x224|0.5413|0.6568| 
+
+## 第一版优化 Version#1
+* V1初始权重采用基线中第二轮最好的模型  Use imagenet pretrained weights		
+* V1依然采用全连接作为分类器  Inner linear classifier		
+* V1使用balance_train.csv中经过数据均衡的数据列表		
+* 选取类别样本数在[50, 500]范围内的样本，共计14132类，先进行一个epoch的warm up，然后正常训练新的特征提取器		
+* 采用新的可靠训练集，使用最新最优的权重finetune特征提取器		
+* 最后使用finetune得到的最优模型并冻结权重进行50030类的训练		
+
+|R|Models|Loss|Opt|Freeze|Epochs|Base LR|LR_STEP|LR_FACTOR|Batch Size|Class Number|Input|GAP|MAP
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|1|res2net_v1b_50|CELoss|Adam GC|Freeze Backbone|1|0.001|4|0.5|768|14132|224x224|0.6753|0.7117| 
+|2|res2net_v1b_50|CELoss|Adam GC|None|10|0.001|4|0.4|96|14132|224x224|0.7972|0.8586|
+|3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|512|50030|224x224|0.6730|0.7561| 
+
+## 第二版优化 Version#2
+* V2初始权重采用V1中第二轮最好的模型 		
+* V2依然采用全连接作为分类器  Inner linear classifier		
+* V2使用balance_train.csv中经过数据均衡的数据列表并且采用V1中验证集准确率大于等于0.75的类别进行训练，共计32845类		
+* 先进行一个epoch的warm up，然后正常训练新的特征提取器		
+* 采用新的可靠训练集，使用最新最优的权重finetune特征提取器		
+* 最后使用finetune得到的最优模型并冻结权重进行50030类的训练		
+
+|R|Models|Loss|Opt|Freeze|Epochs|Base LR|LR_STEP|LR_FACTOR|Batch Size|Class Number|Input|GAP|MAP
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|1|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|1|0.001|4|0.5|512|32845|224x224|0.6528|0.7144| 
+|2|res2net_v1b_50|FocalLoss|Adam GC|Freeze 90 layers|10|0.001|4|0.4|192|32845|224x224|0.8761|0.9174|
+|3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|512|50030|224x224|-|-| 
+

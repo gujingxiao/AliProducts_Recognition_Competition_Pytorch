@@ -5,7 +5,10 @@ import time
 from reader.dataloader import *
 from utils.metric import *
 from utils.margin import *
+from utils.loss import *
 from model import modelzoo
+from optimizer.adam_gc import Adam_GC
+from pytorch_metric_learning import losses, miners
 
 
 def train(train_loader: Any, model: Any, margin: Any, criterion: Any, optimizer: Any, epoch: int, num_classes: Any) -> None:
@@ -13,7 +16,7 @@ def train(train_loader: Any, model: Any, margin: Any, criterion: Any, optimizer:
     batch_time = AverageMeter()
     losses = AverageMeter()
     avg_score = AverageMeter()
-    map_score = MapAverageMeter()
+    map_score = MapAverageMeter(num_classes)
 
     model.train()
     num_steps = min(len(train_loader), MAX_STEPS_PER_EPOCH)
@@ -51,6 +54,12 @@ def train(train_loader: Any, model: Any, margin: Any, criterion: Any, optimizer:
                 epoch, i, num_steps, batch_time.val, batch_time.avg, losses.val, losses.avg,
                 avg_score.val, avg_score.avg, map_score.avg_map, optimizer.state_dict()['param_groups'][0]['lr']))
 
+        if i % SAVE_FREQ == 0 and i > 0:
+            print('Save weights every {} steps.'.format(SAVE_FREQ))
+            torch.save(model.state_dict(), 'weights/aliproducts_recognition_{}_backbone_{}.pkl'.format(BACKBONE, epoch))
+            torch.save(margin.state_dict(), 'weights/aliproducts_recognition_{}_margin_{}_{}.pkl'.format(BACKBONE, MARGIN_TYPE, epoch))
+
+
         if has_time_run_out():
             break
 
@@ -61,7 +70,7 @@ def val(val_loader: Any, model: Any, margin: Any, criterion: Any, num_classes: A
     batch_time = AverageMeter()
     losses = AverageMeter()
     avg_score = AverageMeter()
-    map_score = MapAverageMeter()
+    map_score = MapAverageMeter(num_classes)
 
     model.eval()
     num_steps = len(val_loader)
@@ -93,6 +102,7 @@ def val(val_loader: Any, model: Any, margin: Any, criterion: Any, num_classes: A
                 print('[{}/{}]\t time {:.3f} ({:.3f})\t loss {:.4f} ({:.4f})\t GAP {:.4f} ({:.4f})\t MAP: {:.4f}\t'.format(
                     i, num_steps, batch_time.val, batch_time.avg, losses.val, losses.avg, avg_score.val, avg_score.avg, map_score.avg_map))
 
+
     print(' * on val, average GAP:{:.4f}\t MAP:{:.4f}\t MEAN ERROR:{:.4f}'.format(avg_score.avg, map_score.avg_map, map_score.error))
 
 def has_time_run_out() -> bool:
@@ -109,24 +119,43 @@ if __name__ == '__main__':
     # TODO: Add more backbones
     model = modelzoo.get_model(BACKBONE, num_classes)
     print('Backbone: {}'.format(BACKBONE))
-
-    # Set True for training
-    # Consider freeze some layers while finetuning
-    for param in model.parameters():
-        param.requires_grad = True
-
     # Change last two layers to adapt for the dataset and classification
     # This configuration only for resnet, other models should be different
     model.avg_pool = nn.AdaptiveAvgPool2d(1)
 
+    # Set True for training
+    # Consider freeze some layers while finetuning
+    if FREEZE_BACKBONE == False:
+        if FREEZE_PARTIAL == False:
+            for param in model.parameters():
+                param.requires_grad = True
+        else:
+            freeze_count = 0
+            for param in model.parameters():
+                freeze_count += 1
+                if freeze_count < PARTIAL_NUMBER:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
+            print('{} has {} layers. {} layers will be frozen.'.format(BACKBONE, freeze_count, PARTIAL_NUMBER))
+    else:
+        for param in model.parameters():
+            param.requires_grad = False
+
+
+    # Make sure out feature dim could match the classifier
     if BACKBONE == 'resnet34':
         in_feature = 512
     else:
         in_feature = 2048
+
     if MARGIN_TYPE == 'arcMargin':
-        margin = ArcMarginProduct(in_feature, num_classes)
+        margin = losses.ArcFaceLoss
+        # margin = ArcMarginProduct(in_feature, num_classes)
     elif MARGIN_TYPE == 'inner':
         margin = InnerProduct(in_feature, num_classes)
+    elif MARGIN_TYPE == 'tripletMargin':
+        margin = losses.TripletMarginLoss(margin=0.1)
 
     for param in margin.parameters():
         param.requires_grad = True
@@ -149,12 +178,17 @@ if __name__ == '__main__':
 
     # Loss function
     # TODO: Add more loss function
-    criterion = nn.CrossEntropyLoss()
+    if LOSS_FUNC == 'focalLoss':
+        criterion = FocalLoss()
+    else:
+        criterion = CELoss()
 
     # Set optimizer and learning strategy
-    optimizer = torch.optim.Adam(
-        [{'params': model.parameters(), 'weight_decay': 5e-4},
-        {'params': margin.parameters(), 'weight_decay': 5e-4}], lr=LEARNING_RATE)
+    if OPTIMIZER == 'adam':
+        optimizer = torch.optim.Adam([{'params': model.parameters()}, {'params': margin.parameters()}], lr=LEARNING_RATE)
+    elif OPTIMIZER == 'adam_gc':
+        optimizer = Adam_GC([{'params': model.parameters()}, {'params': margin.parameters()}], lr=LEARNING_RATE)
+
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=LR_STEP, gamma=LR_FACTOR)
 
     # Training

@@ -17,6 +17,7 @@ class InnerProduct(nn.Module):
         output = self.fc(input)
         return output
 
+
 class ArcMarginProduct(nn.Module):
     def __init__(self, in_feature=2048, out_feature=4566, s=32.0, m=0.50, easy_margin=False):
         super(ArcMarginProduct, self).__init__()
@@ -36,9 +37,7 @@ class ArcMarginProduct(nn.Module):
         self.mm = math.sin(math.pi - m) * m
 
     def forward(self, x, label):
-        # cos(theta)
         cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        # cos(theta + m)
         sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
         phi = cosine * self.cos_m - sine * self.sin_m
 
@@ -47,9 +46,9 @@ class ArcMarginProduct(nn.Module):
         else:
             phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
 
-        #one_hot = torch.zeros(cosine.size(), device='cuda' if torch.cuda.is_available() else 'cpu')
-        one_hot = torch.zeros_like(cosine)
-        one_hot.scatter_(1, label.view(-1, 1), 1)
+        one_hot = torch.zeros(cosine.size(), device='cuda')
+        # one_hot = torch.zeros_like(cosine)
+        one_hot.scatter_(1, label.view(-1, 1).long(), 1)
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
         output = output * self.s
 
