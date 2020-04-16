@@ -74,3 +74,8 @@
 |2|res2net_v1b_50|FocalLoss|Adam GC|Freeze 90 layers|10|0.001|4|0.4|192|32845|224x224|0.8761|0.9174|
 |3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|512|50030|224x224|-|-| 
 
+
+
+## 引用 Reference
+1. res2net: https://github.com/Res2Net/Res2Net-PretrainedModels [Res2Net: A New Multi-scale Backbone Architecture]
+2. Gradient-Centralization: https://github.com/Yonghongwei/Gradient-Centralization [Gradient Centralization: A New Optimization Technique for Deep Neural Networks]
