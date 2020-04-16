@@ -86,6 +86,9 @@
 * 这里需要设计一个比较新颖的网络结构   
 * 这部分可能会成为一个比较大的突破    
 
+## 考虑使用决策树做高层级标签分类 Consider Decision Tree
+* 可以考虑使用extractor出来的特征向量，结合xgboost进行训练，可查资料较少，目前不知道效果如何   
+
 ## 引用 Reference
 1. res2net: https://github.com/Res2Net/Res2Net-PretrainedModels [Res2Net: A New Multi-scale Backbone Architecture]
 2. Gradient-Centralization: https://github.com/Yonghongwei/Gradient-Centralization [Gradient Centralization: A New Optimization Technique for Deep Neural Networks]
