@@ -8,6 +8,8 @@
 4. torchvision 0.5.0
 5. pandas 0.23.4
 6. imgaug 0.4.0
+7. NVIDIA APEX (https://github.com/NVIDIA/apex)
+8. cupy
 
 ## 数据转换 Data Convert
 1. 运行jsonTocsv脚本，可以将train.json和val.json转换为对应的csv保存。这里进行转换主要为了处理方便。 		
@@ -30,6 +32,10 @@
 1. 由于图像大小比例不一致，为了保持图像原有比例不变，以最长边为准，短边加pad，将图像居中到一个黑色正方形中		
 2. 当前训练采用分辨率224x224		
 3. 采用imgaug的库进行数，数据显示等采用opencv		
+
+## 训练加速 Training Acceleration
+1. 使用NVIDIA APEX库进行混合精度训练   
+2. 将所有训练中numpy的处理转换为cupy    
 
 ## 基线 Baseline   
 * 基线不使用数据增强 No data augmentations		
