@@ -4,6 +4,7 @@ from model import senet
 from .res2net_v1b import res2net50_v1b_26w_4s, res2net101_v1b_26w_4s
 from .res2net import res2net50_26w_4s, res2net101_26w_4s
 from .res2next import res2next50
+from .resnest.resnest import resnest50, resnest101, resnest200, resnest269
 
 def get_model(model_type='resnet50', num_classes=1000):
     # TODO: Add more backbones
@@ -31,6 +32,14 @@ def get_model(model_type='resnet50', num_classes=1000):
         model = res2next50(pretrained=True)
     elif model_type == 'senet154':
         model = senet.senet154(num_classes=num_classes, pretrained='imagenet')
+    elif model_type == 'resnest50':
+        model = resnest50(pretrained=True)
+    elif model_type == 'resnest101':
+        model = resnest101(pretrained=True)
+    elif model_type == 'resnest200':
+        model = resnest200(pretrained=True)
+    elif model_type == 'resnest269':
+        model = resnest269(pretrained=True)
     else:
         model = resnet.resnet50(pretrained=True)
 

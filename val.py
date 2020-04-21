@@ -8,6 +8,7 @@ from utils.margin import *
 from model import modelzoo
 from utils.loss import *
 from pytorch_metric_learning import losses, miners
+from apex import amp
 
 def val(val_loader: Any, model: Any, margin: Any, criterion: Any, num_classes: Any) -> None:
     batch_time = AverageMeter()
@@ -22,7 +23,7 @@ def val(val_loader: Any, model: Any, margin: Any, criterion: Any, num_classes: A
     end = time.time()
 
     with torch.no_grad():
-        for i, (input_, target) in enumerate(val_loader):
+        for i, (input_, target, img_name) in enumerate(val_loader):
             if i >= num_steps:
                 break
 
@@ -89,6 +90,10 @@ if __name__ == '__main__':
     # Set parallel. Single GPU is also okay.
     model.cuda(device_ids[0])
     margin.cuda(device_ids[0])
+
+    if MIXED_PRECISION_TRAIN == True:
+        [model, margin]= amp.initialize([model, margin], opt_level="O1")
+
     model = nn.DataParallel(model, device_ids=device_ids)
     margin = nn.DataParallel(margin, device_ids=device_ids)
 
