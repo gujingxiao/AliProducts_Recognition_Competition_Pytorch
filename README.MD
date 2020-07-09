@@ -97,13 +97,7 @@
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 |1|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|1|0.001|1|0.4|1024|30265|224x224|0.7094|0.7875| 
 |2|res2net_v1b_50|FocalLoss|Adam GC|None|15|0.001|3|0.5|128|30265|224x224|0.7235|0.8136|
-|3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|1024|50030|224x224|0.7046|0.7877|
-
-## 多层级标签训练 Hierarchical Label Training
-* 在上述基础上，还需要使用数据集的多层级标签训练   
-* 标签共有4级，第4级就是50030类全子标签；第3级有100多个类别，可以从网络再拉一个branch进行第三级标签训练，并且通过加权因子将第三次标签的loss与第四级标签的loss进行求和，再一起进行反向传播    
-* 这里需要设计一个比较新颖的网络结构   
-* 这部分可能会成为一个比较大的突破    
+|3|res2net_v1b_50|FocalLoss|Adam GC|Freeze Backbone|8|0.001|3|0.4|1024|50030|224x224|0.7046|0.7877| 
 
 ## 引用 Reference
 1. res2net: https://github.com/Res2Net/Res2Net-PretrainedModels [Res2Net: A New Multi-scale Backbone Architecture]
